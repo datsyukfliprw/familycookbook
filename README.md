@@ -1,47 +1,79 @@
-# familycookbook
+# Family Cookbook
 
-Our Family Cookbook — a static cookbook site with locally saved recipe additions.
+A source-based, offline-friendly family cookbook for preserving recipes **and the people and stories behind them**.
 
-The site is served from `dist/`. Recipe additions are saved in the browser using local storage because this deployment does not include a server-side database or upload API.
+The production site is served from `dist/`. Family Cookbook v2 now has a real TypeScript source tree under `src/`; `npm run build` compiles that source into `dist/v2` without deleting recipe images, `.fcp` packages, or the preserved legacy app.
 
-## Family Cookbook Packages (.fcp)
+## What v2 adds
 
-The cookbook supports Family Cookbook Packages (`.fcp`) as JSON. The importer accepts both **v1** and **v2** packages.
+- A redesigned home experience with search, **Cook Again**, **Family Favorites**, collections, and recently added recipes
+- Rich recipe pages with hero photography, family attribution, recipe stories, timing/yield metadata, ingredient checkoffs, and serving controls
+- Full-screen **Cook Mode** with one-step-at-a-time directions, keyboard navigation, ingredient context, smoker pit checks, timers, and persisted resume state
+- A dedicated **Smoke Profile** for pit temperature, wood blend, smoke target, pull temperature, cook window, finishing method, and rest time
+- First-class `.fcp` import with drag/drop, validation, preview, warnings, and duplicate detection
+- Manual create/edit recipe flow with section-aware ingredient and direction entry plus advanced smoker fields
+- Family notes and lightweight recipe history
+- Multi-membership collections instead of a single rigid category system
+- Search across titles, ingredients, people, categories, tags, collections, and smoker metadata, including simple phrases such as `under 30 min`
+- Grocery-list generation from recipes
+- PWA/offline caching for the app shell and recipe images
+- Automatic migration of recipes stored by the previous `family-cookbook:user-recipes:v1` browser format
 
-### v2 recipe fields
+## Architecture
 
-Alongside the original `title`, `category`, `ingredients`, `directions`, `note`, `image`, and `meta` fields, v2 can carry richer recipe data:
+```text
+src/
+  app.ts       application/router and UI flows
+  types.ts     unified recipe domain model
+  data.ts      packaged seed recipe data
+  storage.ts   versioned persistence + v1 migration
+  fcp.ts       Family Cookbook Package validation/import
+  search.ts    local recipe search
+  grocery.ts   grocery-list generation
+  styles.css   responsive visual system
 
-- `ingredientSections`: named groups such as Chicken, Tzatziki, Rice, or Sauce
-- `directionSections`: named cooking stages with grouped steps
-- `smoker`: pit temperature, wood blend, smoke target, pull temperature, cook window, and finishing method
-- `pitNotes`: smoker-specific notes shown in a dedicated card
-- `image`: either an embedded data image or a site-local `/recipe-images/...` path
-- `meta.marinate` and `meta.cookLabel`: human-readable timing for ranges such as `2–8 hr` and `45–75 min`
+public/
+  manifest.webmanifest
+  sw.js
 
-The importer validates packages before saving them. If an imported recipe has the same title and category as a recipe already on the device, it updates that recipe in place instead of creating a duplicate.
+scripts/
+  build.mjs    non-destructive static production build
 
-The file picker intentionally does not use an HTML `accept` restriction because iOS Files greys out custom `.fcp` extensions when that filter is present. Package type and version are validated after selection.
+tests/
+  smoke.test.mjs
+```
 
-A v2 sample is included at:
+The app intentionally keeps persistence behind a small storage boundary. Today it uses local storage so the current static/nginx deployment remains simple; a real API/database can replace that layer later without rebuilding the recipe UI.
+
+## Family Cookbook Packages (`.fcp`)
+
+The importer supports package versions **1 and 2** and validates package structure before writing anything. Imported recipes are previewed first. Matching recipe titles are updated rather than duplicated.
+
+The picker intentionally remains unrestricted after opening because iOS Files can grey out custom `.fcp` extensions when an HTML `accept` filter is present. Package format and version are validated after the file is selected.
+
+The existing smoker package remains at:
 
 `dist/packages/smoked-greek-lemon-chicken-bowls.fcp`
 
-The sample uses the smoker-specific recipe layout and bundled hero image at:
+and is represented natively in the v2 data model with its full smoker profile and structured sections.
 
-`dist/recipe-images/smoked-greek-lemon-chicken-bowls.webp`
+## Preserving the previous cookbook
 
-## Recipe detail experience
+The previous compiled application and all of its existing assets remain intact. Its entry point is available at:
 
-User-added recipe detail pages are enhanced on top of the existing static build. The enhanced renderer adds:
+`/legacy/index.html`
 
-- compact mobile title treatment and a 4:3 hero image
-- timing chips and jump navigation
-- a dedicated smoker setup card for Smoking & BBQ recipes
-- real ingredient sections with tap-to-check ingredients
-- grouped/collapsible direction stages
-- a dedicated Pit Notes card
-- removal of the floating My Recipes / Add Recipe / Import controls while reading a recipe
-- compatibility heuristics that make older v1 imported recipes display in sections when their flat lists contain uppercase section labels or `SECTION — step` prefixes
+This gives the migration a safety net: the new app becomes the default experience without deleting the old cookbook or its images/packages.
 
-The current build still stores imported and manually added recipes in browser-local storage. A server-side database/API is the next architectural step if recipes need to sync across devices.
+## Development
+
+```bash
+npm install
+npm run check
+npm test
+npm run build
+```
+
+`npm run build` writes the production modules to `dist/v2`, updates the v2 entry point/PWA files, and **does not remove** `dist/assets`, `dist/recipe-images`, `dist/packages`, or `dist/legacy`.
+
+CI runs TypeScript checking, smoke tests, and a production build for every pull request.
