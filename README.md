@@ -1,52 +1,75 @@
 # Family Cookbook
 
-A source-based, offline-capable family cookbook focused on preserving recipes **and the stories behind them**.
+A source-based, offline-friendly family cookbook for preserving recipes **and the people and stories behind them**.
+
+The production site is served from `dist/`. Family Cookbook v2 has a real TypeScript source tree under `src/`; `npm run build` compiles that source into `dist/v2` without deleting recipe images, `.fcp` packages, or the preserved legacy app.
 
 ## What the current app adds
 
-- Family Cookbook 2.0 home with search, Cook Again, Family Favorites, Recently Added, and Collections
-- A dedicated **Jay's Pit House** experience for smoking/BBQ recipes with its own dark visual system and smoker-first browsing
-- Ingredients-first family recipe pages: hero + quick facts, then ingredients immediately, followed by directions, story, notes, and revision history
-- Full-screen Cook Mode with persisted step progress, keyboard navigation, detected step timers, and smoker pit checks
-- First-class smoker profiles (pit temperature, wood, smoke target, pull temperature, time, finish, and rest)
-- `.fcp` v1/v2 preview, validation, warnings, and duplicate-aware import
-- Simple create/edit flow using natural ingredient/direction text and `[Section]` headings
-- Multi-membership collections and broad local search (including phrases such as `smoker under 60 min`)
-- Grocery list generation from recipes
-- Offline PWA shell and runtime recipe-image caching
-- Automatic migration of recipes previously stored under `family-cookbook:user-recipes:v1`
-- One-time conversion of the original built-in recipe catalog from the preserved legacy bundle into the new structured recipe model; smoker recipes are filed into Jay's Pit House
-
-The original compiled application is still preserved under `/legacy/` as a safety copy. On first load, its built-in recipe catalog is converted into the modern structured cookbook and persisted locally, so the old catalog no longer needs to be used as the everyday recipe UI.
+- **Family Cookbook 2.0** with a warm, family-oriented visual system, search, **Cook Again**, **Family Favorites**, collections, and recently added recipes
+- A dedicated **Jay's Pit House** experience for smoking/BBQ recipes with its own dark ember/charcoal visual system and smoker-focused browsing
+- Ingredients-first recipe pages: hero photography and quick facts first, then **ingredients immediately**, followed by directions, story, notes, and history
+- Full-screen **Cook Mode** with one-step-at-a-time directions, keyboard navigation, ingredient context, smoker pit checks, timers, and persisted resume state
+- A dedicated **Smoke Profile** for pit temperature, wood blend, smoke target, pull temperature, cook window, finishing method, and rest time
+- First-class `.fcp` import with drag/drop, validation, preview, warnings, and duplicate detection
+- Manual create/edit recipe flow with section-aware ingredient and direction entry plus advanced smoker fields
+- Family notes and lightweight recipe history
+- Multi-membership collections instead of a single rigid category system
+- Search across titles, ingredients, people, categories, tags, collections, and smoker metadata, including simple phrases such as `under 30 min`
+- Grocery-list generation from recipes
+- PWA/offline caching for the app shell, migration source, theme assets, and recipe images
+- Automatic migration of recipes stored by the previous `family-cookbook:user-recipes:v1` browser format
+- A one-time structured conversion of the original built-in recipe catalog from the preserved legacy bundle; smoker recipes are automatically filed into **Jay's Pit House**
 
 ## Architecture
 
-The application is intentionally dependency-light. It is written in strict TypeScript and uses browser platform APIs rather than patching a pre-rendered React bundle.
-
 ```text
 src/
-  app.ts        routing + UI + interactions
-  data.ts       native seed recipes
-  fcp.ts        package validation/import mapping
-  grocery.ts    grocery-list normalization
-  legacy-catalog.ts one-time built-in catalog conversion
-  search.ts     cookbook search
-  storage.ts    versioned persistence + v1 migration
-  types.ts      unified recipe model
-  styles.css    responsive heirloom cookbook design
-  themes.css    Family Cookbook + Jay's Pit House visual systems
+  app.ts             application/router and UI flows
+  types.ts           unified recipe domain model
+  data.ts            packaged seed recipe data
+  storage.ts         versioned persistence + v1 migration
+  legacy-catalog.ts  one-time original catalog conversion
+  fcp.ts             Family Cookbook Package validation/import
+  search.ts          local recipe search
+  grocery.ts         grocery-list generation
+  styles.css         responsive base visual system
+  themes.css         Family Cookbook + Jay's Pit House themes
+
 public/
   manifest.webmanifest
   sw.js
+
 scripts/
-  build.mjs
+  build.mjs          non-destructive static production build
+
+tests/
+  smoke.test.mjs
 ```
 
-`dist/` remains the deployable directory. The build only replaces `dist/v2`, `dist/index.html`, the manifest, and the service worker; existing `recipe-images`, `.fcp` packages, and legacy assets are preserved.
+The app intentionally keeps persistence behind a small storage boundary. Today it uses local storage so the current static/nginx deployment remains simple; a real API/database can replace that layer later without rebuilding the recipe UI.
+
+## Family Cookbook Packages (`.fcp`)
+
+The importer supports package versions **1 and 2** and validates package structure before writing anything. Imported recipes are previewed first. Matching recipe titles are updated rather than duplicated.
+
+The picker intentionally remains unrestricted after opening because iOS Files can grey out custom `.fcp` extensions when an HTML `accept` filter is present. Package format and version are validated after the file is selected.
+
+The existing smoker package remains at:
+
+`dist/packages/smoked-greek-lemon-chicken-bowls.fcp`
+
+and is represented natively in the v2 data model with its full smoker profile and structured sections.
+
+## Preserving and converting the previous cookbook
+
+The previous compiled application and all of its existing assets remain intact. Its entry point is still available at:
+
+`/legacy/index.html`
+
+The legacy copy is now a safety net rather than the everyday catalog. On first load, the current app reads the trusted built-in recipe array from the preserved legacy bundle, converts those recipes into the modern structured model, skips duplicates, files smoking/BBQ recipes into Jay's Pit House, and persists the result locally. The migration marker is written only after a successful conversion, so a failed load can retry later.
 
 ## Development
-
-Requirements: Node 20+ and npm.
 
 ```bash
 npm install
@@ -55,20 +78,6 @@ npm test
 npm run build
 ```
 
-Serve `dist/` with any static server. The existing `nginx.conf` remains compatible because navigation uses hash routes.
+`npm run build` writes the production modules and theme assets to `dist/v2`, updates the v2 entry point/PWA files, and **does not remove** `dist/assets`, `dist/recipe-images`, `dist/packages`, or `dist/legacy`.
 
-## Family Cookbook Packages (.fcp)
-
-The importer accepts Family Cookbook Package versions 1 and 2, validates before writing, caps packages at 10 MB / 100 recipes, previews warnings, and detects matching recipe titles before import.
-
-A complete v2 smoker example is included at:
-
-`dist/packages/smoked-greek-lemon-chicken-bowls.fcp`
-
-Its bundled hero image is:
-
-`dist/recipe-images/smoked-greek-lemon-chicken-bowls.webp`
-
-## Persistence
-
-This remains a static/private-first application. Recipes, cook progress, timers, notes, and grocery state are stored in the browser. A server-side database/auth/sync layer can replace the storage module later without changing the recipe model or UI flows.
+The build also preserves the iOS-friendly unrestricted `.fcp` picker behavior. CI runs TypeScript checking, smoke tests (including validation against the real preserved legacy catalog), and a production build for every pull request.
