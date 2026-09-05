@@ -4,11 +4,12 @@
   const isHubPage = () => location.pathname === '/my-recipes' || location.pathname === '/add-recipe';
 
   const syncHomeLinks = () => {
-    document.querySelectorAll('.upload-back').forEach(button => {
-      if (!isHubPage()) {
-        button.removeAttribute('data-cookbook-home');
-        return;
-      }
+    if (!isHubPage()) return;
+
+    // Only touch newly rendered legacy back buttons once. The previous version
+    // rewrote textContent on every mutation, which could trigger the observer
+    // again and create a render loop on iPhone Safari.
+    document.querySelectorAll('.upload-back:not([data-cookbook-home])').forEach(button => {
       button.setAttribute('data-cookbook-home', '');
       button.setAttribute('aria-label', 'Back to cookbook home');
       button.textContent = '← Home';
@@ -16,8 +17,6 @@
   };
 
   // Capture at window level so this runs before the legacy document click handler.
-  // The legacy handler owns /my-recipes and /add-recipe, but does not hand control
-  // back to the main app when its back button points outside those custom routes.
   window.addEventListener('click', event => {
     const target = event.target instanceof Element
       ? event.target.closest('[data-cookbook-home]')
@@ -34,7 +33,7 @@
 
   const boot = () => {
     syncHomeLinks();
-    const observer = new MutationObserver(syncHomeLinks);
+    const observer = new MutationObserver(() => syncHomeLinks());
     observer.observe(document.body, { childList: true, subtree: true });
   };
 
