@@ -43,10 +43,13 @@ test('the preserved legacy bundle still contains an extractable full recipe cata
   let source;
   try { source = await readFile(new URL('../dist/assets/index-DN7Jouwl.js', import.meta.url), 'utf8'); }
   catch { t.skip('legacy bundle is not present in this reduced local fixture'); return; }
-  const marker = '{id:"smoked-chicken-thighs-crispy-skin",title:"Smoked Chicken Thighs (Crispy Skin)"';
+  const marker = 'smoked-chicken-thighs-crispy-skin';
   const markerIndex = source.indexOf(marker);
-  assert.ok(markerIndex > 0, 'first legacy recipe marker should exist');
-  const start = source.lastIndexOf('[', markerIndex);
+  assert.ok(markerIndex > 0, 'first legacy recipe id should exist');
+  const objectStart = source.lastIndexOf('{', markerIndex);
+  assert.ok(objectStart > 0 && markerIndex - objectStart < 512, 'first legacy recipe object should be close to its id');
+  const start = source.lastIndexOf('[', objectStart);
+  assert.ok(start > 0, 'catalog array should start before the first recipe object');
   let depth = 0, quote = '', escaped = false, end = -1;
   for (let i = start; i < source.length; i += 1) {
     const char = source[i];
@@ -64,6 +67,7 @@ test('the preserved legacy bundle still contains an extractable full recipe cata
   const catalog = Function(`"use strict";return (${source.slice(start, end)});`)();
   assert.ok(Array.isArray(catalog));
   assert.ok(catalog.length > 30, `expected a full catalog, got ${catalog.length}`);
+  assert.ok(catalog.some(recipe => recipe.id === marker));
   assert.ok(catalog.some(recipe => recipe.title === 'Apple Crisp Snack Mix'));
   assert.ok(catalog.some(recipe => recipe.smokerDetails));
 });
