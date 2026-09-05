@@ -4,6 +4,7 @@ await rm('dist/v2', { recursive: true, force: true });
 await mkdir('dist/v2', { recursive: true });
 await cp('.build', 'dist/v2', { recursive: true });
 await cp('src/styles.css', 'dist/v2/styles.css');
+await cp('src/themes.css', 'dist/v2/themes.css');
 await cp('src/index.html', 'dist/index.html');
 await cp('public/manifest.webmanifest', 'dist/manifest.webmanifest');
 await cp('public/sw.js', 'dist/sw.js');
