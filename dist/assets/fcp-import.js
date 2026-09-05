@@ -134,7 +134,9 @@
 
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept = '.fcp,application/json';
+    // Do not set an accept filter here. iOS Files treats unknown custom extensions
+    // like .fcp as non-selectable when accept is restricted, even though the
+    // package contents are valid JSON. We validate the package after selection.
     input.hidden = true;
     input.setAttribute('data-fcp-input', '');
 
