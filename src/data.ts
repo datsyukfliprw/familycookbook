@@ -1,0 +1,40 @@
+import type { Recipe } from './types.js';
+
+const now = Date.UTC(2026, 8, 4, 18, 0, 0);
+const slug = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+const ingredient = (raw: string, section: string, index: number) => ({ id: `seed-${slug(section)}-${index}`, raw, name: raw.replace(/^\s*[\d¼½¾⅓⅔⅛⅜⅝⅞⁄/ .–-]+\s*(?:cups?|tablespoons?|tbsp|teaspoons?|tsp|lb|lbs|oz|cloves?|large|small)?\s*/i, '').replace(/,.*$/, '').trim() || raw });
+const step = (text: string, section: string, index: number) => ({ id: `seed-step-${slug(section)}-${index}`, text });
+
+export const seedRecipes: Recipe[] = [{
+  id: 'smoked-greek-lemon-chicken-bowls',
+  title: 'Smoked Greek Lemon Chicken Bowls',
+  category: 'Smoking & BBQ',
+  image: '/recipe-images/smoked-greek-lemon-chicken-bowls.webp',
+  description: 'Bright lemon, oregano, cool cucumber and tzatziki against clean white-oak smoke.',
+  story: 'Built for a hot-weather cook: fresh Greek flavors, tender smoked chicken thighs, and enough smoke to deepen the bowl without bulldozing the lemon and herbs.',
+  author: 'Jay', addedBy: 'Jay', servings: 6, prepMinutes: 25, cookLabel: '45–75 min', marinate: '2–8 hr',
+  tags: ['chicken', 'summer', 'smoker', 'Greek', 'high-protein'],
+  collections: ["Jay's Smoking Recipes", 'Summer', 'Family Favorites'],
+  ingredientSections: [
+    ['Chicken', ['2½ lb boneless skinless chicken thighs','1 cup plain Greek yogurt, preferably 2%','Zest of 2 lemons','¼ cup fresh lemon juice','1½ tablespoons extra-virgin olive oil','5 cloves garlic, finely grated or minced','2 teaspoons dried oregano','1 teaspoon dried thyme','1½ teaspoons kosher salt','1 teaspoon coarse black pepper','1 teaspoon smoked paprika','½ teaspoon onion powder','½ teaspoon ground coriander','¼ teaspoon red pepper flakes, optional']],
+    ['Cucumber-Tomato Salad', ['1 large English cucumber, chopped','2 cups cherry tomatoes, halved','½ red onion, very thinly sliced','½ cup chopped flat-leaf parsley','¼ cup chopped fresh dill','⅓ cup crumbled feta','Juice of 1 lemon','1 tablespoon olive oil','Salt, to taste','Black pepper, to taste']],
+    ['Tzatziki', ['1½ cups plain Greek yogurt','½ English cucumber','2 cloves garlic, very finely grated','1 tablespoon olive oil','1½ tablespoons fresh lemon juice','2 tablespoons chopped dill','1 tablespoon chopped mint, optional','½ teaspoon kosher salt','Black pepper, to taste']],
+    ['Lemon-Herb Rice', ['1½ cups basmati or jasmine rice','2¼ cups chicken stock or water','Zest of 1 lemon','2 tablespoons lemon juice','¼ cup chopped parsley','2 tablespoons chopped dill','½ teaspoon salt']],
+    ['Bowl Finishes', ['Shredded romaine, optional','Extra crumbled feta','Fresh dill or parsley','Lemon wedges','Kalamata olives, optional']],
+    ['Smoked Lemon Vinaigrette', ['2 lemon halves','3 tablespoons smoked lemon juice','2 tablespoons olive oil','1 teaspoon Dijon mustard','½ teaspoon honey','Pinch dried oregano','Salt, to taste','Black pepper, to taste']]
+  ].map(([title, items]) => ({ id: `seed-section-${slug(title as string)}`, title: title as string, ingredients: (items as string[]).map((raw, i) => ingredient(raw, title as string, i)) })),
+  directionSections: [
+    ['Marinate', ['Mix the Greek yogurt, lemon zest, lemon juice, olive oil, garlic, oregano, thyme, kosher salt, black pepper, smoked paprika, onion powder, coriander, and red pepper flakes until smooth.','Pat the chicken thighs dry, add them to the marinade, and work the mixture thoroughly over every piece.','Refrigerate at least 2 hours. Four to 6 hours is ideal. Avoid going much beyond 8 to 10 hours because the lemon acid can begin changing the texture.']],
+    ['Set up the smoker', ['Run the smoker at 300°F with approximately 75% white oak and 25% pear or apple. Use a clean fire with thin blue smoke.','Take the chicken out of the refrigerator about 20 minutes before cooking. Do not rinse off the marinade; let only the heavy excess drip away so a thin yogurt coating remains.']],
+    ['Smoke the chicken', ['Put the thighs directly on the grate with a little space between them. Smoke at 300°F for about 30 minutes, then begin checking internal temperature. Rotate if your smoker has obvious hot spots.','Pull the thighs around 175–180°F internal for tender, juicy thighs. Depending on thickness and the smoker, expect roughly 45 to 70 minutes total.','Optional: when the thighs are around 165°F, briefly finish over high direct heat or on a very hot grill or griddle for 60–90 seconds per side to add char without materially increasing cook time.','Rest the chicken 8–10 minutes, then slice across the grain.']],
+    ['Cucumber-Tomato Salad', ['Combine cucumber, tomatoes, red onion, parsley, dill, lemon juice, olive oil, salt, and black pepper. Let sit about 10 minutes, then fold in the feta immediately before serving. If the raw onion is too sharp, soak the slices in cold water for 10 minutes first.']],
+    ['Tzatziki', ['Grate the cucumber and squeeze it very dry in a clean towel or several paper towels. Mix with the Greek yogurt, garlic, olive oil, lemon juice, dill, optional mint, salt, and black pepper. Refrigerate at least 30 minutes; a couple of hours is even better.']],
+    ['Lemon-Herb Rice', ['Cook the rice normally in the chicken stock or water. Once cooked, fluff it and gently mix in lemon zest, lemon juice, parsley, dill, and salt. Add the fresh herbs after cooking to keep them bright. For a cooler summer bowl, let the rice come toward room temperature before serving.']],
+    ['Smoked Lemon Vinaigrette', ['While the chicken cooks, put two lemon halves cut-side-up in the smoker for 20–30 minutes. Squeeze them and whisk 3 tablespoons smoked lemon juice with olive oil, Dijon, honey, oregano, salt, and black pepper.']],
+    ['Build the bowls', ['Start each bowl with about ¾ cup lemon-herb rice. Add a generous scoop of cucumber-tomato salad and shredded romaine if desired. Top with 5–6 oz sliced smoked chicken.','Add 2–3 tablespoons tzatziki, a small sprinkle of feta, fresh dill or parsley, a lemon wedge, and optional Kalamata olives. Drizzle only a teaspoon or two of smoked lemon vinaigrette over the chicken.','Squeeze fresh lemon over the chicken immediately before eating. The fresh acid at the end is an important part of the finished flavor.']]
+  ].map(([title, steps]) => ({ id: `seed-directions-${slug(title as string)}`, title: title as string, steps: (steps as string[]).map((text, i) => step(text, title as string, i)) })),
+  smoker: { pitTemperatureF: 300, wood: '75% white oak · 25% pear or apple', smoke: 'Clean fire · thin blue smoke', targetInternalF: '175–180°F', time: '45–70 min', finish: 'Optional 60–90 sec/side high-heat char', restMinutes: 10 },
+  pitNotes: 'This bowl is built around contrast: white-oak depth and a touch of fruitwood sweetness against bright lemon, oregano, cool cucumber, tomato, dill, feta, and tzatziki. Keep the smoke light so it sits under the Greek seasoning instead of bulldozing it.',
+  note: 'Serves 6. Prep is about 25 minutes plus 2–8 hours marinating.', notes: [],
+  history: [{ id: 'seed-history', at: now, summary: 'Imported from Family Cookbook Package v2', by: 'Jay' }], favorite: true, createdAt: now, updatedAt: now
+}];
