@@ -1,0 +1,10 @@
+{
+  "name": "Family Cookbook",
+  "short_name": "Cookbook",
+  "description": "Family recipes, stories, cook mode, and grocery lists.",
+  "start_url": "/#/",
+  "display": "standalone",
+  "background_color": "#f5efe6",
+  "theme_color": "#211713",
+  "icons": []
+}
