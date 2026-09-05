@@ -2,7 +2,7 @@ import type { CookbookState, Recipe } from './types.js';
 
 const MIGRATION_KEY = 'family-cookbook:bundled-catalog:v1';
 const LEGACY_BUNDLE = '/assets/index-DN7Jouwl.js';
-const FIRST_RECIPE_MARKER = '{id:"smoked-chicken-thighs-crispy-skin",title:"Smoked Chicken Thighs (Crispy Skin)"';
+const FIRST_RECIPE_ID = 'smoked-chicken-thighs-crispy-skin';
 
 type LegacyIngredient = { quantity?: unknown; unit?: unknown; item?: unknown };
 type LegacyIngredientSection = { name?: unknown; ingredients?: LegacyIngredient[] };
@@ -36,9 +36,12 @@ const parseDate = (value: unknown) => {
 const rawIngredient = (ingredient: LegacyIngredient) => [text(ingredient.quantity), text(ingredient.unit), text(ingredient.item)].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
 
 const extractCatalogLiteral = (source: string): string => {
-  const marker = source.indexOf(FIRST_RECIPE_MARKER);
+  // Anchor on the stable recipe id, not minifier-dependent punctuation or quote style.
+  const marker = source.indexOf(FIRST_RECIPE_ID);
   if (marker < 0) throw new Error('Legacy recipe catalog marker was not found.');
-  const start = source.lastIndexOf('[', marker);
+  const objectStart = source.lastIndexOf('{', marker);
+  if (objectStart < 0 || marker - objectStart > 512) throw new Error('Legacy first recipe object was not found.');
+  const start = source.lastIndexOf('[', objectStart);
   if (start < 0) throw new Error('Legacy recipe catalog start was not found.');
 
   let depth = 0;
@@ -128,7 +131,12 @@ export const migrateBundledLegacyCatalog = async (state: CookbookState): Promise
 
   // The literal is extracted only from the app's own trusted, versioned legacy bundle.
   const parsed = Function(`"use strict"; return (${literal});`)() as unknown;
-  if (!Array.isArray(parsed) || parsed.length < 2 || parsed.length > 500) throw new Error('Original recipe catalog did not pass validation.');
+  if (
+    !Array.isArray(parsed) ||
+    parsed.length < 2 ||
+    parsed.length > 500 ||
+    !parsed.some(item => text((item as LegacyRecipe)?.id) === FIRST_RECIPE_ID)
+  ) throw new Error('Original recipe catalog did not pass validation.');
 
   const existingIds = new Set(state.recipes.map(recipe => recipe.id));
   const existingTitles = new Set(state.recipes.map(recipe => recipe.title.toLowerCase()));
