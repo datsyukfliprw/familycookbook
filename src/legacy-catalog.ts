@@ -1,47 +1,51 @@
-import type { CookbookState, Recipe } from './types.js';
+import type { CookbookState, DirectionSection, IngredientSection, Recipe } from './types.js';
 
 const MIGRATION_KEY = 'family-cookbook:bundled-catalog:v1';
 const LEGACY_BUNDLE = '/assets/index-DN7Jouwl.js';
-const FIRST_RECIPE_ID = 'smoked-chicken-thighs-crispy-skin';
+const KNOWN_RECIPE_TITLE = 'Apple Crisp Snack Mix';
+const CATALOG_START = /\[\{id:(["'`])[^"'`]+\1,title:(["'`])[^"'`]+\2,category:(["'`])[^"'`]+\3,order:\d+,intro:\[/;
 
-type LegacyIngredient = { quantity?: unknown; unit?: unknown; item?: unknown };
-type LegacyIngredientSection = { name?: unknown; ingredients?: LegacyIngredient[] };
-type LegacyDirection = { id?: unknown; text?: unknown };
-type LegacySmoker = { temp?: unknown; wood?: unknown; smoke?: unknown; targetInternal?: unknown; time?: unknown; finish?: unknown; rest?: unknown };
+type LegacyMeta = {
+  prepMinutes?: unknown;
+  cookMinutes?: unknown;
+  totalMinutes?: unknown;
+  temperatureF?: unknown;
+  yield?: unknown;
+  cookLabel?: unknown;
+  marinate?: unknown;
+};
+type LegacyIngredientSection = { title?: unknown; name?: unknown; items?: unknown[]; ingredients?: unknown[] };
+type LegacyDirectionSection = { title?: unknown; name?: unknown; steps?: unknown[] };
 type LegacyRecipe = {
   id?: unknown;
   title?: unknown;
-  description?: unknown;
   category?: unknown;
-  coverImage?: unknown;
-  postDate?: unknown;
-  dietaryTags?: unknown;
-  prepTime?: unknown;
-  cookTime?: unknown;
+  order?: unknown;
+  intro?: unknown[];
+  ingredients?: unknown[];
+  directions?: unknown[];
   ingredientSections?: LegacyIngredientSection[];
-  directions?: LegacyDirection[];
-  smokerDetails?: LegacySmoker;
+  directionSections?: LegacyDirectionSection[];
+  tips?: unknown[];
+  note?: unknown;
+  image?: unknown;
+  meta?: LegacyMeta;
+  smoker?: Record<string, unknown>;
 };
 
 const text = (value: unknown) => String(value ?? '').trim();
 const slug = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-const minutes = (value: unknown) => {
-  const match = text(value).match(/(\d+)/);
-  return match ? Number(match[1]) : undefined;
+const numberValue = (value: unknown): number | undefined => {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  const match = text(value).match(/\d+(?:\.\d+)?/);
+  return match ? Number(match[0]) : undefined;
 };
-const parseDate = (value: unknown) => {
-  const parsed = Date.parse(text(value));
-  return Number.isFinite(parsed) ? parsed : Date.UTC(2026, 0, 1);
-};
-const rawIngredient = (ingredient: LegacyIngredient) => [text(ingredient.quantity), text(ingredient.unit), text(ingredient.item)].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
+const looksLikeHeading = (value: string) => value.length > 0 && value.length <= 46 && !/\d/.test(value) && value === value.toUpperCase() && /[A-Z]/.test(value);
+const titleCase = (value: string) => value.toLowerCase().replace(/(^|[\s/&-])\w/g, match => match.toUpperCase());
 
 const extractCatalogLiteral = (source: string): string => {
-  // Anchor on the stable recipe id, not minifier-dependent punctuation or quote style.
-  const marker = source.indexOf(FIRST_RECIPE_ID);
-  if (marker < 0) throw new Error('Legacy recipe catalog marker was not found.');
-  const objectStart = source.lastIndexOf('{', marker);
-  if (objectStart < 0 || marker - objectStart > 512) throw new Error('Legacy first recipe object was not found.');
-  const start = source.lastIndexOf('[', objectStart);
+  const match = CATALOG_START.exec(source);
+  const start = match?.index ?? -1;
   if (start < 0) throw new Error('Legacy recipe catalog start was not found.');
 
   let depth = 0;
@@ -65,56 +69,102 @@ const extractCatalogLiteral = (source: string): string => {
   throw new Error('Legacy recipe catalog end was not found.');
 };
 
+const normalizeIngredientSections = (legacy: LegacyRecipe, id: string): IngredientSection[] => {
+  if (Array.isArray(legacy.ingredientSections) && legacy.ingredientSections.length) {
+    return legacy.ingredientSections.map((section, sectionIndex) => {
+      const items = Array.isArray(section.items) ? section.items : Array.isArray(section.ingredients) ? section.ingredients : [];
+      return {
+        id: `${id}-ingredients-${sectionIndex}`,
+        title: text(section.title ?? section.name) || 'Ingredients',
+        ingredients: items.map((item, itemIndex) => {
+          const raw = typeof item === 'object' && item !== null && 'raw' in item ? text((item as { raw?: unknown }).raw) : text(item);
+          const name = typeof item === 'object' && item !== null && 'name' in item ? text((item as { name?: unknown }).name) : raw;
+          return { id: `${id}-ingredient-${sectionIndex}-${itemIndex}`, raw, name: name || raw };
+        }).filter(item => item.raw)
+      };
+    }).filter(section => section.ingredients.length);
+  }
+
+  const flat = Array.isArray(legacy.ingredients) ? legacy.ingredients.map(text).filter(Boolean) : [];
+  const groups: { title: string; items: string[] }[] = [];
+  let current = { title: 'Ingredients', items: [] as string[] };
+  for (const raw of flat) {
+    if (looksLikeHeading(raw)) {
+      if (current.items.length) groups.push(current);
+      current = { title: titleCase(raw), items: [] };
+    } else current.items.push(raw);
+  }
+  if (current.items.length) groups.push(current);
+  if (!groups.length && flat.length) groups.push({ title: 'Ingredients', items: flat });
+  return groups.map((group, sectionIndex) => ({
+    id: `${id}-ingredients-${sectionIndex}`,
+    title: group.title,
+    ingredients: group.items.map((raw, itemIndex) => ({ id: `${id}-ingredient-${sectionIndex}-${itemIndex}`, raw, name: raw }))
+  }));
+};
+
+const normalizeDirectionSections = (legacy: LegacyRecipe, id: string): DirectionSection[] => {
+  if (Array.isArray(legacy.directionSections) && legacy.directionSections.length) {
+    return legacy.directionSections.map((section, sectionIndex) => ({
+      id: `${id}-directions-${sectionIndex}`,
+      title: text(section.title ?? section.name) || 'Directions',
+      steps: (Array.isArray(section.steps) ? section.steps : []).map((step, stepIndex) => ({
+        id: `${id}-step-${sectionIndex}-${stepIndex}`,
+        text: typeof step === 'object' && step !== null && 'text' in step ? text((step as { text?: unknown }).text) : text(step)
+      })).filter(step => step.text)
+    })).filter(section => section.steps.length);
+  }
+
+  const steps = Array.isArray(legacy.directions) ? legacy.directions.map((step, stepIndex) => ({
+    id: `${id}-step-${stepIndex}`,
+    text: typeof step === 'object' && step !== null && 'text' in step ? text((step as { text?: unknown }).text) : text(step)
+  })).filter(step => step.text) : [];
+  return steps.length ? [{ id: `${id}-directions`, title: 'Directions', steps }] : [];
+};
+
+const noteList = (value: unknown): string[] => Array.isArray(value) ? value.map(text).filter(Boolean) : text(value) ? [text(value)] : [];
+
 const convertRecipe = (legacy: LegacyRecipe, index: number): Recipe | null => {
   const title = text(legacy.title);
   if (!title) return null;
   const id = text(legacy.id) || `legacy-${slug(title)}-${index}`;
   const category = text(legacy.category) || 'Family recipes';
-  const smokerRaw = legacy.smokerDetails;
-  const isSmoker = Boolean(smokerRaw) || /smok|bbq|barbecue/i.test(category);
-  const createdAt = parseDate(legacy.postDate);
-  const ingredientSections = Array.isArray(legacy.ingredientSections)
-    ? legacy.ingredientSections.map((section, sectionIndex) => ({
-        id: `${id}-ingredients-${sectionIndex}`,
-        title: text(section.name) || 'Ingredients',
-        ingredients: Array.isArray(section.ingredients) ? section.ingredients.map((item, itemIndex) => {
-          const raw = rawIngredient(item);
-          return { id: `${id}-ingredient-${sectionIndex}-${itemIndex}`, raw, name: text(item.item) || raw };
-        }).filter(item => item.raw) : []
-      })).filter(section => section.ingredients.length) : [];
-  const steps = Array.isArray(legacy.directions) ? legacy.directions.map((direction, stepIndex) => ({
-    id: text(direction.id) || `${id}-step-${stepIndex}`,
-    text: text(direction.text)
-  })).filter(step => step.text) : [];
-  const smoker = smokerRaw ? {
-    pitTemperatureF: minutes(smokerRaw.temp),
-    wood: text(smokerRaw.wood) || undefined,
-    smoke: text(smokerRaw.smoke) || undefined,
-    targetInternalF: text(smokerRaw.targetInternal) || undefined,
-    time: text(smokerRaw.time) || undefined,
-    finish: text(smokerRaw.finish) || undefined,
-    restMinutes: minutes(smokerRaw.rest)
+  const ingredientSections = normalizeIngredientSections(legacy, id);
+  const directionSections = normalizeDirectionSections(legacy, id);
+  const directionText = directionSections.flatMap(section => section.steps.map(step => step.text)).join(' ');
+  const isSmoker = /smok|bbq|barbecue/i.test(category) || /\b(smok(?:e|ed|ing|er)|bbq|barbecue)\b/i.test(`${title} ${directionText}`) || Boolean(legacy.smoker);
+  const meta = legacy.meta ?? {};
+  const order = numberValue(legacy.order) ?? index;
+  const createdAt = Date.UTC(2026, 0, 1) + order * 1000;
+  const intro = Array.isArray(legacy.intro) ? legacy.intro.map(text).filter(Boolean) : [];
+  const tips = noteList(legacy.tips).map(tip => `Tip: ${tip}`);
+  const notes = [...noteList(legacy.note), ...tips];
+  const servings = Math.max(1, Math.round(numberValue(meta.yield) ?? 4));
+  const prepMinutes = numberValue(meta.prepMinutes);
+  const cookMinutes = numberValue(meta.cookMinutes);
+  const pitTemperatureF = isSmoker ? numberValue(meta.temperatureF) : undefined;
+  const smoker = isSmoker ? {
+    pitTemperatureF,
+    time: text(meta.cookLabel) || (cookMinutes ? `${cookMinutes} min` : undefined)
   } : undefined;
 
   return {
     id,
     title,
-    description: text(legacy.description) || undefined,
+    description: intro[0] || undefined,
+    story: intro.length ? intro.join('\n\n') : undefined,
     category,
-    image: text(legacy.coverImage) || undefined,
-    servings: 4,
-    prepMinutes: minutes(legacy.prepTime),
-    cookMinutes: minutes(legacy.cookTime),
-    cookLabel: text(legacy.cookTime) || undefined,
-    tags: [
-      ...(Array.isArray(legacy.dietaryTags) ? legacy.dietaryTags.map(text).filter(Boolean) : []),
-      ...(isSmoker ? ['smoker'] : [])
-    ],
+    image: text(legacy.image) || undefined,
+    servings,
+    prepMinutes,
+    cookMinutes,
+    cookLabel: text(meta.cookLabel) || undefined,
+    tags: isSmoker ? ['smoker'] : [],
     collections: isSmoker ? ["Jay's Pit House", category] : [category],
     ingredientSections,
-    directionSections: steps.length ? [{ id: `${id}-directions`, title: 'Directions', steps }] : [],
+    directionSections,
     smoker,
-    notes: [],
+    notes,
     history: [{ id: `${id}-legacy-migration`, at: createdAt, summary: 'Migrated from the original Family Cookbook' }],
     favorite: false,
     createdAt,
@@ -129,18 +179,21 @@ export const migrateBundledLegacyCatalog = async (state: CookbookState): Promise
   const source = await response.text();
   const literal = extractCatalogLiteral(source);
 
-  // The literal is extracted only from the app's own trusted, versioned legacy bundle.
+  // The literal comes from this app's own trusted, versioned legacy bundle.
   const parsed = Function(`"use strict"; return (${literal});`)() as unknown;
   if (
     !Array.isArray(parsed) ||
-    parsed.length < 2 ||
+    parsed.length < 30 ||
     parsed.length > 500 ||
-    !parsed.some(item => text((item as LegacyRecipe)?.id) === FIRST_RECIPE_ID)
+    !parsed.some(item => text((item as LegacyRecipe)?.title) === KNOWN_RECIPE_TITLE) ||
+    parsed.filter(item => Array.isArray((item as LegacyRecipe)?.ingredients) && Array.isArray((item as LegacyRecipe)?.directions)).length < Math.floor(parsed.length * 0.8)
   ) throw new Error('Original recipe catalog did not pass validation.');
+
+  const converted = parsed.map((recipe, index) => convertRecipe(recipe as LegacyRecipe, index)).filter((recipe): recipe is Recipe => Boolean(recipe));
+  if (converted.length < 30) throw new Error('Original recipe catalog conversion was incomplete.');
 
   const existingIds = new Set(state.recipes.map(recipe => recipe.id));
   const existingTitles = new Set(state.recipes.map(recipe => recipe.title.toLowerCase()));
-  const converted = parsed.map((recipe, index) => convertRecipe(recipe as LegacyRecipe, index)).filter((recipe): recipe is Recipe => Boolean(recipe));
   let added = 0;
   for (const recipe of converted) {
     if (existingIds.has(recipe.id) || existingTitles.has(recipe.title.toLowerCase())) continue;
