@@ -382,8 +382,7 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').cat
 setInterval(updateTimerDisplays, 1000);
 render();
 void migrateBundledLegacyCatalog(state).then(added => {
-  if (!added) return;
-  persist();
   render();
+  if (!added) return;
   setTimeout(() => toast(`Brought ${added} original recipe${added === 1 ? '' : 's'} into the new cookbook.`), 80);
 }).catch(error => console.warn('Legacy catalog migration will retry on the next load.', error));

@@ -1,9 +1,11 @@
 import type { CookbookState, DirectionSection, IngredientSection, Recipe } from './types.js';
+import { saveState } from './storage.js';
 
-const MIGRATION_KEY = 'family-cookbook:bundled-catalog:v1';
+const MIGRATION_KEY = 'family-cookbook:bundled-catalog:v2';
 const LEGACY_BUNDLE = '/assets/index-DN7Jouwl.js';
+const IMAGE_MANIFEST = '/recipe-images/manifest.json';
 const KNOWN_RECIPE_TITLE = 'Apple Crisp Snack Mix';
-const CATALOG_START = /\[\{id:(["'`])[^"'`]+\1,title:(["'`])[^"'`]+\2,category:(["'`])[^"'`]+\3,order:\d+,intro:\[/;
+const CATALOG_START = /\[\s*\{\s*id\s*:/g;
 
 type LegacyMeta = {
   prepMinutes?: unknown;
@@ -43,11 +45,7 @@ const numberValue = (value: unknown): number | undefined => {
 const looksLikeHeading = (value: string) => value.length > 0 && value.length <= 46 && !/\d/.test(value) && value === value.toUpperCase() && /[A-Z]/.test(value);
 const titleCase = (value: string) => value.toLowerCase().replace(/(^|[\s/&-])\w/g, match => match.toUpperCase());
 
-const extractCatalogLiteral = (source: string): string => {
-  const match = CATALOG_START.exec(source);
-  const start = match?.index ?? -1;
-  if (start < 0) throw new Error('Legacy recipe catalog start was not found.');
-
+const extractArrayLiteral = (source: string, start: number): string => {
   let depth = 0;
   let quote = '';
   let escaped = false;
@@ -67,6 +65,196 @@ const extractCatalogLiteral = (source: string): string => {
     }
   }
   throw new Error('Legacy recipe catalog end was not found.');
+};
+
+/** Parses the data-only subset of JavaScript used by the preserved minified bundle. */
+class LegacyLiteralParser {
+  private index = 0;
+
+  constructor(private readonly source: string) {}
+
+  parse(): unknown {
+    const value = this.parseValue();
+    this.skipWhitespace();
+    if (this.index !== this.source.length) this.fail('Unexpected content after the catalog');
+    return value;
+  }
+
+  private parseValue(): unknown {
+    this.skipWhitespace();
+    const char = this.source[this.index];
+    let value: unknown;
+    if (char === '!') {
+      this.index += 1;
+      value = !this.parseValue();
+    }
+    else if (char === '[') value = this.parseArray();
+    else if (char === '{') value = this.parseObject();
+    else if (char === '"' || char === "'" || char === '`') value = this.parseString();
+    else if (char === '-' || (char && /\d/.test(char))) value = this.parseNumber();
+    else {
+      const identifier = this.parseIdentifier();
+      if (identifier === 'null') value = null;
+      else if (identifier === 'true') value = true;
+      else if (identifier === 'false') value = false;
+      else if (identifier === 'undefined') value = undefined;
+      else this.fail(`Unsupported value ${identifier || '(empty)'}`);
+    }
+
+    // Five legacy fields compact arrays as a string literal followed by split().
+    // Support only that non-executable, allow-listed expression shape.
+    this.skipWhitespace();
+    if (this.source.startsWith('.split', this.index)) {
+      if (typeof value !== 'string') this.fail('split() is only supported on strings');
+      this.index += '.split'.length;
+      this.expect('(');
+      const separator = this.parseValue();
+      if (typeof separator !== 'string') this.fail('split() requires a string separator');
+      this.expect(')');
+      value = value.split(separator);
+    }
+    return value;
+  }
+
+  private parseArray(): unknown[] {
+    const result: unknown[] = [];
+    this.expect('[');
+    this.skipWhitespace();
+    while (this.source[this.index] !== ']') {
+      result.push(this.parseValue());
+      this.skipWhitespace();
+      if (this.source[this.index] !== ',') break;
+      this.index += 1;
+      this.skipWhitespace();
+      if (this.source[this.index] === ']') break;
+    }
+    this.expect(']');
+    return result;
+  }
+
+  private parseObject(): Record<string, unknown> {
+    const result: Record<string, unknown> = {};
+    this.expect('{');
+    this.skipWhitespace();
+    while (this.source[this.index] !== '}') {
+      const char = this.source[this.index];
+      const key = char === '"' || char === "'" || char === '`' ? this.parseString() : this.parseIdentifier();
+      if (!key) this.fail('Expected an object key');
+      this.skipWhitespace();
+      this.expect(':');
+      result[key] = this.parseValue();
+      this.skipWhitespace();
+      if (this.source[this.index] !== ',') break;
+      this.index += 1;
+      this.skipWhitespace();
+      if (this.source[this.index] === '}') break;
+    }
+    this.expect('}');
+    return result;
+  }
+
+  private parseString(): string {
+    const quote = this.source[this.index] ?? '';
+    this.index += 1;
+    let result = '';
+    while (this.index < this.source.length) {
+      const char = this.source[this.index] ?? '';
+      this.index += 1;
+      if (char === quote) return result;
+      if (char !== '\\') {
+        if (quote === '`' && char === '$' && this.source[this.index] === '{') this.fail('Template expressions are not data');
+        result += char;
+        continue;
+      }
+      const escaped = this.source[this.index] ?? '';
+      this.index += 1;
+      const simple: Record<string, string> = { n: '\n', r: '\r', t: '\t', b: '\b', f: '\f', v: '\v', '0': '\0' };
+      if (escaped in simple) result += simple[escaped];
+      else if (escaped === '\n') { /* JavaScript line continuation */ }
+      else if (escaped === '\r') { if (this.source[this.index] === '\n') this.index += 1; }
+      else if (escaped === 'x') result += this.parseCodePoint(2);
+      else if (escaped === 'u') {
+        if (this.source[this.index] === '{') {
+          this.index += 1;
+          const end = this.source.indexOf('}', this.index);
+          if (end < 0) this.fail('Unterminated Unicode escape');
+          const raw = this.source.slice(this.index, end);
+          if (!/^[\da-f]+$/i.test(raw)) this.fail('Invalid Unicode escape');
+          result += String.fromCodePoint(Number.parseInt(raw, 16));
+          this.index = end + 1;
+        } else result += this.parseCodePoint(4);
+      } else result += escaped;
+    }
+    this.fail('Unterminated string');
+  }
+
+  private parseCodePoint(length: number): string {
+    const raw = this.source.slice(this.index, this.index + length);
+    if (raw.length !== length || !/^[\da-f]+$/i.test(raw)) this.fail('Invalid character escape');
+    this.index += length;
+    return String.fromCharCode(Number.parseInt(raw, 16));
+  }
+
+  private parseNumber(): number {
+    const match = /^-?(?:0[xX][\da-fA-F]+|(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?)/.exec(this.source.slice(this.index));
+    if (!match) this.fail('Invalid number');
+    this.index += match[0].length;
+    const value = Number(match[0]);
+    if (!Number.isFinite(value)) this.fail('Invalid finite number');
+    return value;
+  }
+
+  private parseIdentifier(): string {
+    const match = /^[A-Za-z_$][\w$]*/.exec(this.source.slice(this.index));
+    if (!match) return '';
+    this.index += match[0].length;
+    return match[0];
+  }
+
+  private skipWhitespace(): void {
+    while (/\s/.test(this.source[this.index] ?? '')) this.index += 1;
+  }
+
+  private expect(expected: string): void {
+    this.skipWhitespace();
+    if (this.source[this.index] !== expected) this.fail(`Expected ${expected}`);
+    this.index += 1;
+  }
+
+  private fail(message: string): never {
+    throw new Error(`${message} at legacy catalog offset ${this.index}.`);
+  }
+}
+
+const isValidCatalog = (value: unknown): value is LegacyRecipe[] => Array.isArray(value) &&
+  value.length >= 30 &&
+  value.length <= 500 &&
+  value.some(item => text((item as LegacyRecipe)?.title) === KNOWN_RECIPE_TITLE) &&
+  value.filter(item => Array.isArray((item as LegacyRecipe)?.ingredients) && Array.isArray((item as LegacyRecipe)?.directions)).length >= Math.floor(value.length * 0.8);
+
+export const parseLegacyCatalog = (source: string): LegacyRecipe[] => {
+  CATALOG_START.lastIndex = 0;
+  let catalogError: unknown;
+  for (const match of source.matchAll(CATALOG_START)) {
+    try {
+      const literal = extractArrayLiteral(source, match.index ?? 0);
+      const parsed = new LegacyLiteralParser(literal).parse();
+      if (isValidCatalog(parsed)) return parsed;
+    } catch (error) {
+      if (source.slice(match.index ?? 0, (match.index ?? 0) + 700_000).includes(KNOWN_RECIPE_TITLE)) catalogError = error;
+      // Other arrays in the minified application are not the recipe catalog.
+    }
+  }
+  throw new Error('Legacy recipe catalog was not found or did not pass validation.', { cause: catalogError });
+};
+
+const normalizeImagePath = (value: unknown, availableImages: ReadonlySet<string>): string | undefined => {
+  const requested = text(value).split(/[?#]/, 1)[0] ?? '';
+  if (!/^\/recipe-images\/[a-z0-9._/-]+$/i.test(requested) || requested.includes('..')) return undefined;
+  if (availableImages.has(requested)) return requested;
+  const basename = requested.slice(requested.lastIndexOf('/') + 1);
+  const matches = [...availableImages].filter(path => path.endsWith(`/${basename}`));
+  return matches.length === 1 ? matches[0] : undefined;
 };
 
 const normalizeIngredientSections = (legacy: LegacyRecipe, id: string): IngredientSection[] => {
@@ -124,7 +312,7 @@ const normalizeDirectionSections = (legacy: LegacyRecipe, id: string): Direction
 
 const noteList = (value: unknown): string[] => Array.isArray(value) ? value.map(text).filter(Boolean) : text(value) ? [text(value)] : [];
 
-const convertRecipe = (legacy: LegacyRecipe, index: number): Recipe | null => {
+const convertRecipe = (legacy: LegacyRecipe, index: number, availableImages: ReadonlySet<string>): Recipe | null => {
   const title = text(legacy.title);
   if (!title) return null;
   const id = text(legacy.id) || `legacy-${slug(title)}-${index}`;
@@ -154,7 +342,7 @@ const convertRecipe = (legacy: LegacyRecipe, index: number): Recipe | null => {
     description: intro[0] || undefined,
     story: intro.length ? intro.join('\n\n') : undefined,
     category,
-    image: text(legacy.image) || undefined,
+    image: normalizeImagePath(legacy.image, availableImages),
     servings,
     prepMinutes,
     cookMinutes,
@@ -174,34 +362,49 @@ const convertRecipe = (legacy: LegacyRecipe, index: number): Recipe | null => {
 
 export const migrateBundledLegacyCatalog = async (state: CookbookState): Promise<number> => {
   if (localStorage.getItem(MIGRATION_KEY) === 'done') return 0;
-  const response = await fetch(LEGACY_BUNDLE, { cache: 'force-cache' });
-  if (!response.ok) throw new Error(`Could not load the original recipe catalog (${response.status}).`);
-  const source = await response.text();
-  const literal = extractCatalogLiteral(source);
+  const [bundleResponse, imageResponse] = await Promise.all([
+    fetch(LEGACY_BUNDLE, { cache: 'force-cache' }),
+    fetch(IMAGE_MANIFEST, { cache: 'force-cache' })
+  ]);
+  if (!bundleResponse.ok) throw new Error(`Could not load the original recipe catalog (${bundleResponse.status}).`);
+  if (!imageResponse.ok) throw new Error(`Could not load the recipe image manifest (${imageResponse.status}).`);
 
-  // The literal comes from this app's own trusted, versioned legacy bundle.
-  const parsed = Function(`"use strict"; return (${literal});`)() as unknown;
-  if (
-    !Array.isArray(parsed) ||
-    parsed.length < 30 ||
-    parsed.length > 500 ||
-    !parsed.some(item => text((item as LegacyRecipe)?.title) === KNOWN_RECIPE_TITLE) ||
-    parsed.filter(item => Array.isArray((item as LegacyRecipe)?.ingredients) && Array.isArray((item as LegacyRecipe)?.directions)).length < Math.floor(parsed.length * 0.8)
-  ) throw new Error('Original recipe catalog did not pass validation.');
+  const [source, imageManifest] = await Promise.all([bundleResponse.text(), imageResponse.json() as Promise<unknown>]);
+  if (!Array.isArray(imageManifest) || imageManifest.some(path => typeof path !== 'string' || !path.startsWith('/recipe-images/'))) {
+    throw new Error('Recipe image manifest did not pass validation.');
+  }
 
-  const converted = parsed.map((recipe, index) => convertRecipe(recipe as LegacyRecipe, index)).filter((recipe): recipe is Recipe => Boolean(recipe));
+  const parsed = parseLegacyCatalog(source);
+  const availableImages = new Set(imageManifest as string[]);
+  const converted = parsed.map((recipe, index) => convertRecipe(recipe, index, availableImages)).filter((recipe): recipe is Recipe => Boolean(recipe));
   if (converted.length < 30) throw new Error('Original recipe catalog conversion was incomplete.');
 
-  const existingIds = new Set(state.recipes.map(recipe => recipe.id));
-  const existingTitles = new Set(state.recipes.map(recipe => recipe.title.toLowerCase()));
+  const existingIds = new Map(state.recipes.map((recipe, index) => [recipe.id, index]));
+  const existingTitles = new Map(state.recipes.map((recipe, index) => [recipe.title.toLowerCase(), index]));
   let added = 0;
+  const nextRecipes = [...state.recipes];
   for (const recipe of converted) {
-    if (existingIds.has(recipe.id) || existingTitles.has(recipe.title.toLowerCase())) continue;
-    state.recipes.push(recipe);
-    existingIds.add(recipe.id);
-    existingTitles.add(recipe.title.toLowerCase());
+    const existingIndex = existingIds.get(recipe.id) ?? existingTitles.get(recipe.title.toLowerCase());
+    if (existingIndex !== undefined) {
+      const existing = nextRecipes[existingIndex];
+      const cameFromBundledCatalog = existing?.history.some(entry => entry.summary === 'Migrated from the original Family Cookbook');
+      if (existing && cameFromBundledCatalog) {
+        const repairedImage = normalizeImagePath(existing.image, availableImages) ?? recipe.image;
+        if (repairedImage !== existing.image) nextRecipes[existingIndex] = { ...existing, image: repairedImage };
+      }
+      continue;
+    }
+    nextRecipes.push(recipe);
+    existingIds.set(recipe.id, nextRecipes.length - 1);
+    existingTitles.set(recipe.title.toLowerCase(), nextRecipes.length - 1);
     added += 1;
   }
+
+  // Save the catalog before recording completion. A failed/quota-limited write must
+  // retry next load instead of permanently stranding a browser with only seed data.
+  const changed = added > 0 || nextRecipes.some((recipe, index) => recipe !== state.recipes[index]);
+  if (changed) saveState({ ...state, recipes: nextRecipes });
+  state.recipes = nextRecipes;
   localStorage.setItem(MIGRATION_KEY, 'done');
   return added;
 };

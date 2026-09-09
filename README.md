@@ -67,7 +67,7 @@ The previous compiled application and all of its existing assets remain intact. 
 
 `/legacy/index.html`
 
-The legacy copy is now a safety net rather than the everyday catalog. On first load, the current app reads the trusted built-in recipe array from the preserved legacy bundle, converts those recipes into the modern structured model, skips duplicates, files smoking/BBQ recipes into Jay's Pit House, and persists the result locally. The migration marker is written only after a successful conversion, so a failed load can retry later.
+The legacy copy is now a safety net rather than the everyday catalog. On first load, the current app parses the data-only built-in recipe array from the preserved legacy bundle (without dynamic code evaluation), converts those recipes into the modern structured model, skips duplicates, files smoking/BBQ recipes into Jay's Pit House, and persists the result locally. The build generates an image manifest so migrated recipes only reference files that exist, including assets preserved in nested legacy directories. The migration marker is written only after the complete v2 state is saved, so a failed write can retry later.
 
 ## Development
 

@@ -1,5 +1,5 @@
-const CACHE = 'family-cookbook-v3-pit-house-2026-09-05';
-const CORE = ['/', '/v2/app.js', '/v2/styles.css', '/v2/themes.css', '/v2/legacy-catalog.js', '/assets/index-DN7Jouwl.js', '/manifest.webmanifest'];
+const CACHE = 'family-cookbook-v4-legacy-catalog-2026-09-05';
+const CORE = ['/', '/v2/app.js', '/v2/styles.css', '/v2/themes.css', '/v2/legacy-catalog.js', '/assets/index-DN7Jouwl.js', '/recipe-images/manifest.json', '/manifest.webmanifest'];
 self.addEventListener('install', event => event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(CORE)).then(() => self.skipWaiting())));
 self.addEventListener('activate', event => event.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(key => key !== CACHE).map(key => caches.delete(key)))).then(() => self.clients.claim())));
 self.addEventListener('fetch', event => {

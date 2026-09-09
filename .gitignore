@@ -1,0 +1,18 @@
+# Dependencies
+node_modules/
+
+# Intermediate TypeScript output
+.build/
+
+# Source maps are useful locally but are not part of the deployed site.
+dist/v2/*.map
+
+# Local configuration and logs
+.env
+.env.*
+!.env.example
+*.log
+npm-debug.log*
+
+# OS metadata
+.DS_Store
