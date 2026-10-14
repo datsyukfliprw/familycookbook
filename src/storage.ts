@@ -68,7 +68,17 @@ const legacyToRecipe = (raw: Record<string, unknown>, index: number): Recipe | n
 export const loadState = (): CookbookState => {
   try {
     const stored = JSON.parse(localStorage.getItem(STATE_KEY) ?? 'null') as CookbookState | null;
-    if (stored?.version === 2 && Array.isArray(stored.recipes)) return stored;
+    if (stored?.version === 2 && Array.isArray(stored.recipes)) {
+      let changed = false;
+      for (const seed of seedRecipes) {
+        if (!stored.recipes.some(recipe => recipe.id === seed.id || recipe.title.toLowerCase() === seed.title.toLowerCase())) {
+          stored.recipes.push(clone(seed));
+          changed = true;
+        }
+      }
+      if (changed) saveState(stored);
+      return stored;
+    }
   } catch { /* recover below */ }
 
   const recipes = clone(seedRecipes);
