@@ -1,0 +1,54 @@
+{
+  "format": "family-cookbook-package",
+  "version": 2,
+  "name": "Family Cookbook Cookies",
+  "recipes": [
+    {
+      "title": "Oatmeal Raisin Cookies (Freezer Batch)",
+      "category": "Desserts",
+      "meta": {
+        "prepMinutes": 25,
+        "cookLabel": "15 min from frozen",
+        "yield": "Double batch; number varies by 2-inch portions"
+      },
+      "ingredientSections": [
+        {
+          "title": "Double Batch",
+          "items": [
+            "1½ cups butter, softened",
+            "1½ cups white sugar",
+            "1½ cups packed light brown sugar",
+            "4 large eggs",
+            "2 teaspoons vanilla extract",
+            "2½ cups all-purpose flour",
+            "2 teaspoons baking soda",
+            "1½ teaspoons ground cinnamon",
+            "1 teaspoon salt",
+            "5½ cups rolled oats",
+            "2 cups raisins"
+          ]
+        }
+      ],
+      "directionSections": [
+        {
+          "title": "Prepare and freeze",
+          "steps": [
+            "Beat butter, white sugar, and brown sugar until smooth and creamy. Beat in eggs and vanilla until fluffy.",
+            "In a separate bowl, stir together flour, baking soda, cinnamon, and salt. Gradually beat into butter mixture.",
+            "Stir in rolled oats and raisins.",
+            "Portion dough into 2-inch balls. Freeze until solid, then store in freezer-safe bags or containers."
+          ]
+        },
+        {
+          "title": "Bake from frozen",
+          "steps": [
+            "Preheat oven to 375°F. Line baking sheets with parchment paper or silicone liners.",
+            "Place frozen dough balls on prepared sheets with room to spread. Do not thaw.",
+            "Bake directly from frozen for 15 minutes. Let cool briefly on the baking sheet."
+          ]
+        }
+      ],
+      "note": "Family method: always double the original recipe, freeze in 2-inch balls, and bake from frozen at 375°F for 15 minutes. Original recipe listed 48 cookies per single batch; yield with larger portions varies."
+    }
+  ]
+}
