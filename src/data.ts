@@ -37,4 +37,27 @@ export const seedRecipes: Recipe[] = [{
   pitNotes: 'This bowl is built around contrast: white-oak depth and a touch of fruitwood sweetness against bright lemon, oregano, cool cucumber, tomato, dill, feta, and tzatziki. Keep the smoke light so it sits under the Greek seasoning instead of bulldozing it.',
   note: 'Serves 6. Prep is about 25 minutes plus 2–8 hours marinating.', notes: [],
   history: [{ id: 'seed-history', at: now, summary: 'Imported from Family Cookbook Package v2', by: 'Jay' }], favorite: true, createdAt: now, updatedAt: now
+}, {
+  id: 'oatmeal-raisin-cookies-freezer', title: 'Oatmeal Raisin Cookies (Freezer Batch)', category: 'Desserts',
+  description: 'Double-batch oatmeal raisin cookies, frozen in 2-inch dough balls and baked straight from frozen.',
+  servings: 48, prepMinutes: 25, cookMinutes: 15, cookLabel: '15 min from frozen',
+  tags: ['cookies', 'oatmeal', 'raisins', 'freezer-friendly'], collections: ['Desserts', 'Cookies'],
+  ingredientSections: [{ id: 'oatmeal-ingredients', title: 'Double batch', ingredients: [
+    '1½ cups butter, softened','1½ cups white sugar','1½ cups packed light brown sugar','4 large eggs','2 teaspoons vanilla extract','2½ cups all-purpose flour','2 teaspoons baking soda','1½ teaspoons ground cinnamon','1 teaspoon salt','5½ cups rolled oats','2 cups raisins'
+  ].map((raw, i) => ingredient(raw, 'oatmeal', i)) }],
+  directionSections: [
+    { id: 'oatmeal-prep', title: 'Prepare and freeze', steps: [
+      'Beat butter, white sugar, and brown sugar until smooth and creamy. Beat in eggs and vanilla until fluffy.',
+      'In a separate bowl, combine flour, baking soda, cinnamon, and salt. Gradually beat into butter mixture. Stir in oats and raisins.',
+      'Portion dough into 2-inch balls. Freeze until solid, then store in freezer-safe bags or containers.'
+    ].map((text, i) => step(text, 'oatmeal-prep', i)) },
+    { id: 'oatmeal-bake', title: 'Bake from frozen', steps: [
+      'Preheat oven to 375°F and line baking sheets with parchment or silicone liners.',
+      'Place frozen dough balls on sheets with space to spread. Do not thaw.',
+      'Bake straight from frozen at 375°F for 15 minutes. Let cool briefly on the sheet.'
+    ].map((text, i) => step(text, 'oatmeal-bake', i)) }
+  ],
+  note: 'Family method: double the original recipe, freeze 2-inch dough balls, and bake from frozen at 375°F for 15 minutes. Yield varies with larger portions.',
+  notes: [], history: [{ id: 'oatmeal-seed-history', at: now, summary: 'Added to family cookbook' }],
+  favorite: false, createdAt: now, updatedAt: now
 }];
